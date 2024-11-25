@@ -1,0 +1,44 @@
+{
+	"message": "ok",
+	"data":
+	{
+		"token": "token",
+		"user":
+		{
+			"team":
+			{
+				"name": "name",
+				"billing_plan":
+				{
+					"readable_name": "Self-hosted",
+					"is_paid": true,
+					"name": "Self-hosted",
+					"abilities":
+					{
+						"can_set_expire_after": true,
+						"can_set_media_password": true,
+						"can_copy_direct_link": true,
+						"can_upload_original_media": true
+					}
+				},
+				"id": 1,
+				"enable_transcription": true,
+				"longer_urls": true,
+				"show_file_name": true,
+				"show_download_button": true
+			},
+			"active": true,
+			"storage":
+			{
+				"limit_readable": "Unlimited",
+				"is_limited": false
+			},
+			"name": "ssl",
+			"avatar_url": "https://avatars.githubusercontent.com/u/25695071",
+			"email_verified": true,
+			"id": 1,
+			"email": "cleanshot-cloud",
+			"role": "admin"
+		}
+	}
+}
