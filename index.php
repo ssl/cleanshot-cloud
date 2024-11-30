@@ -25,12 +25,11 @@ aapje::route('GET', '/@slug', function ($slug) {
         }
 
         $filePath = 'uploads/' . $upload['id'] . '.png';
-
         if (!file_exists($filePath)) {
             throw new Exception('File not found');
         }
 
-        $file = file_get_contents($filePath);
+        $file = Helpers::getFile($filePath);
         aapje::response()->header('Content-Type', 'image/png')
         ->echo($file, false);
     } catch (Exception $e) {
@@ -75,7 +74,7 @@ aapje::route('POST', '/v1/media/image', function () {
     $foundSlug = false;
     while (!$foundSlug) {
         try {
-            $slug = uniqid('', true);
+            $slug = generateSlug();
             if (empty(aapje::select('uploads', ['id'], ['slug' => $slug]))) {
                 $foundSlug = true;
             }
@@ -124,7 +123,6 @@ aapje::route('POST', '/v1/media/upload/@id', function ($id) {
 
         Helpers::putFile("uploads/{$id}.png", $image);
 
-        // Set status code to 204 No Content
         aapje::response()->statusCode(204)->echo('');
     } catch (Exception $e) {
         aapje::response()->statusCode(500)->echo(['error' => $e->getMessage()]);
@@ -137,10 +135,16 @@ aapje::route('POST', '/v1/media/image/@id/upload-completed', function ($id) {
     aapje::response()->echo([]);
 });
 
+// Get user data
 function userData() {
     $userData = Helpers::getFile('user.json');
     return json_decode($userData, true);
 }
 
-// Run the application
+// Generate unique slug
+function generateSlug() {
+    return uniqid('', true);
+}
+
+// Run the API
 aapje::run();
