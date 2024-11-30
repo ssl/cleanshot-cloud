@@ -2,11 +2,20 @@
 require 'aapje.php';
 
 $config = parse_ini_file('.env');
+
 aapje::setDbConfig([
     'host' => $config['dbhost'],
     'dbname' => $config['dbname'],
     'user' => $config['dbuser'],
     'password' => $config['dbpassword'],
+]);
+
+aapje::setConfig([
+    'default_headers' => [
+        'Access-Control-Allow-Origin' => '*',
+        'Access-Control-Allow-Methods' => '*',
+        'Access-Control-Allow-Headers' => '*',
+    ],
 ]);
 
 // View upload image
@@ -32,6 +41,12 @@ aapje::route('GET', '/@slug', function ($slug) {
     }
 });
 
+// Maintenance ping
+aapje::route('*', '/v1/maintenance', function () {
+    aapje::response()
+    ->echo('all ok :)');
+});
+
 // Get user info
 aapje::route('GET', '/v1/user', function () {
     aapje::response()->echo(userData());
@@ -40,6 +55,16 @@ aapje::route('GET', '/v1/user', function () {
 // Logout user
 aapje::route('GET', '/v1/auth/logout', function () {
     aapje::response()->echo(['message' => 'ok']);
+});
+
+// Login user
+aapje::route('*', '/v1/auth/login', function () {
+    aapje::response()->echo(userData());
+});
+
+// Code user
+aapje::route('*', '/v1/auth/code', function () {
+    aapje::response()->echo(userData());
 });
 
 // Redeem login code
