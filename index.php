@@ -3,25 +3,22 @@ require 'aapje.php';
 
 $config = parse_ini_file('.env');
 
-aapje::setDbConfig([
-    'host' => $config['dbhost'],
-    'dbname' => $config['dbname'],
-    'user' => $config['dbuser'],
-    'password' => $config['dbpassword'],
-]);
-
 aapje::setConfig([
-    'default_headers' => [
-        'Access-Control-Allow-Origin' => '*',
-        'Access-Control-Allow-Methods' => '*',
-        'Access-Control-Allow-Headers' => '*',
+    'database' => [
+        'host' => $config['dbhost'],
+        'dbname' => $config['dbname'],
+        'user' => $config['dbuser'],
+        'password' => $config['dbpassword'],
+    ],
+    'cors' => [
+        'enabled' => true
     ],
 ]);
 
 // View upload image
 aapje::route('GET', '/@slug', function ($slug) {
     try {
-        $upload = aapje::select('uploads', '*', ['slug' => $slug]);
+        $upload = aapje::select('uploads', ['id'], ['slug' => $slug]);
 
         if (empty($upload)) {
             throw new Exception('Upload not found');
@@ -35,14 +32,14 @@ aapje::route('GET', '/@slug', function ($slug) {
 
         $file = file_get_contents($filePath);
         aapje::response()->header('Content-Type', 'image/png')
-            ->echo($file, false);
+        ->echo($file, false);
     } catch (Exception $e) {
         aapje::response()->statusCode(404)->echo(['error' => 'Not found']);
     }
 });
 
 // Maintenance ping
-aapje::route('*', '/v1/maintenance', function () {
+aapje::route('GET', '/v1/maintenance', function () {
     aapje::response()
     ->echo('all ok :)');
 });
@@ -58,12 +55,12 @@ aapje::route('GET', '/v1/auth/logout', function () {
 });
 
 // Login user
-aapje::route('*', '/v1/auth/login', function () {
+aapje::route('POST', '/v1/auth/login', function () {
     aapje::response()->echo(userData());
 });
 
 // Code user
-aapje::route('*', '/v1/auth/code', function () {
+aapje::route('POST', '/v1/auth/code', function () {
     aapje::response()->echo(userData());
 });
 
@@ -74,14 +71,12 @@ aapje::route('POST', '/v1/auth/code/redeem', function () {
 
 // Generate image upload URL
 aapje::route('POST', '/v1/media/image', function () {
-    $data = aapje::request()->input();
-
     // Generate a unique slug
     $foundSlug = false;
     while (!$foundSlug) {
         try {
             $slug = uniqid('', true);
-            if (empty(aapje::select('uploads', '*', ['slug' => $slug]))) {
+            if (empty(aapje::select('uploads', ['id'], ['slug' => $slug]))) {
                 $foundSlug = true;
             }
         } catch (Exception $e) {
@@ -111,13 +106,10 @@ aapje::route('POST', '/v1/media/image', function () {
 // Upload image
 aapje::route('POST', '/v1/media/upload/@id', function ($id) {
     try {
-        $upload = aapje::select('uploads', '*', ['id' => $id]);
-        if (empty($upload)) {
+        $upload = aapje::select('uploads', ['completed'], ['id' => $id]);
+        
+        if (empty($upload) || $upload['completed'] == 1) {
             throw new Exception('Upload not found');
-        }
-
-        if ($upload['completed'] == 1) {
-            throw new Exception('Upload already completed');
         }
 
         $file = aapje::request()->file('file');
@@ -125,13 +117,12 @@ aapje::route('POST', '/v1/media/upload/@id', function ($id) {
             throw new Exception('File not uploaded');
         }
 
-        $fileContents = file_get_contents($file['tmp_name']);
-
-        if ($fileContents === false || $fileContents === null) {
+        $image = Helpers::getFile($file['tmp_name']);
+        if ($image === false || $image === null) {
             throw new Exception('File not read');
         }
 
-        file_put_contents('uploads/' . $id . '.png', $fileContents);
+        Helpers::putFile("uploads/{$id}.png", $image);
 
         // Set status code to 204 No Content
         aapje::response()->statusCode(204)->echo('');
@@ -147,7 +138,7 @@ aapje::route('POST', '/v1/media/image/@id/upload-completed', function ($id) {
 });
 
 function userData() {
-    $userData = file_get_contents('user.json');
+    $userData = Helpers::getFile('user.json');
     return json_decode($userData, true);
 }
 

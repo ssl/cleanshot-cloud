@@ -35,13 +35,35 @@
 class aapje {
     public static $version = '0.2';
     private static $routes = [];
-    private static $dbConfig = [];
-    private static $pdo = null;
-    private static $request = null;
-    private static $response = null;
+    private static $middleware = [];
     private static $config = [
+        'database' => [
+            'host' => '',
+            'dbname' => '',
+            'user' => '',
+            'password' => ''
+        ],
+        'cors' => [
+            'enabled' => false,
+            'origins' => ['*'],
+            'methods' => ['*'],
+            'headers' => ['*'],
+            'credentials' => false,
+        ],
         'default_headers' => []
     ];
+    private static $request = null;
+    private static $response = null;
+    private static $pdo = null;
+
+    /**
+     * Register a middleware function.
+     *
+     * @param callable $callback Middleware function accepting ($request, $response)
+     */
+    public static function middleware(callable $callback) {
+        self::$middleware[] = $callback;
+    }
 
     /**
      * Define a route with a specific HTTP method or all methods using '*'.
@@ -89,10 +111,23 @@ class aapje {
     /**
      * Set global configuration options.
      *
-     * @param array $config Configuration array (e.g., ['default_headers' => ['X-Custom-Header' => 'Value']])
+     * @param array $config Configuration array
      */
     public static function setConfig(array $config) {
         foreach ($config as $key => $value) {
+            // CORS Configuration
+            if ($key === 'cors' && is_array($value)) {
+                self::$config['cors'] = array_merge(self::$config['cors'], $value);
+            }
+
+            // Database Configuration
+            if ($key === 'database' && is_array($value)) {
+                if (!empty($value['host'])) {
+                    self::$config['database'] = array_merge(self::$config['database'], $value);
+                }
+            }
+
+            // Default Headers Configuration
             if ($key === 'default_headers' && is_array($value)) {
                 self::$config['default_headers'] = array_merge(self::$config['default_headers'], $value);
                 if (self::$response !== null) {
@@ -112,6 +147,16 @@ class aapje {
         $requestUri = parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH);
 
         try {
+            // Execute Middleware
+            foreach (self::$middleware as $middleware) {
+                $middleware(self::request(), self::response());
+            }
+
+            // Handle CORS if enabled
+            if (self::$config['cors']['enabled']) {
+                self::handleCORS(self::request(), self::response());
+            }
+
             $routeFound = false;
             foreach (self::$routes as $route) {
                 if ($route['method'] === '*' || $route['method'] === strtoupper($requestMethod)) {
@@ -136,12 +181,35 @@ class aapje {
     }
 
     /**
-     * Set database configuration parameters.
+     * Handle CORS settings.
      *
-     * @param array $config Database configuration (host, dbname, user, password)
+     * @param Request $request
+     * @param Response $response
      */
-    public static function setDbConfig(array $config) {
-        self::$dbConfig = $config;
+    private static function handleCORS($request, $response) {
+        $corsConfig = self::$config['cors'];
+
+        // Determine allowed origins
+        $allowedOrigins = $corsConfig['origins'];
+        $origin = $request->header('Origin');
+
+        if (in_array('*', $allowedOrigins)) {
+            $response->header('Access-Control-Allow-Origin', '*');
+        } elseif ($origin && in_array($origin, $allowedOrigins)) {
+            $response->header('Access-Control-Allow-Origin', $origin);
+        }
+
+        // Set other CORS headers
+        $response->header('Access-Control-Allow-Methods', implode(', ', $corsConfig['methods']));
+        $response->header('Access-Control-Allow-Headers', implode(', ', $corsConfig['headers']));
+        if ($corsConfig['credentials']) {
+            $response->header('Access-Control-Allow-Credentials', 'true');
+        }
+
+        // Handle preflight OPTIONS request
+        if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
+            $response->statusCode(204)->echo(null, false);
+        }
     }
 
     /**
@@ -151,10 +219,10 @@ class aapje {
         if (self::$pdo === null) {
             $dsn = sprintf(
                 "mysql:host=%s;dbname=%s;charset=utf8mb4",
-                self::$dbConfig['host'],
-                self::$dbConfig['dbname']
+                self::$config['database']['host'],
+                self::$config['database']['dbname']
             );
-            self::$pdo = new PDO($dsn, self::$dbConfig['user'], self::$dbConfig['password'], [
+            self::$pdo = new PDO($dsn, self::$config['database']['user'], self::$config['database']['password'], [
                 PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
                 PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
             ]);
@@ -386,7 +454,46 @@ class aapje {
     }
 }
 
-// Request class
+/**
+ * Helpers Class
+ * 
+ * Provides utility functions for common tasks.
+ */
+class Helpers {
+    /**
+     * Escape HTML special characters.
+     *
+     * @param string $string The string to escape.
+     * @return string        The escaped string.
+     */
+    public static function esc(string $string): string {
+        return htmlspecialchars($string, ENT_QUOTES, 'UTF-8');
+    }
+
+    /**
+     * Get the contents of a file.
+     * 
+     * @param string $file Path to the file.
+     * @return string      The file contents.
+     */
+    public static function getFile(string $file): string {
+        return file_get_contents($file);
+    }
+
+    /**
+     * Put new content into a file.
+     * @param string $file      Path to the file.
+     * @param string $content  The new content.
+     * @return void
+     */
+    public static function putFile(string $file, string $content): void {
+        file_put_contents($file, $content);
+    }
+}
+
+/**
+ * Request Class
+ */
 class Request {
     /**
      * Retrieve a specific HTTP request header.
@@ -457,10 +564,17 @@ class Request {
         return $_FILES;
     }
 
-    public function input($decode = true) {
+    /**
+     * Retrieve and decode JSON input from the request body.
+     *
+     * @param bool $decode Whether to decode JSON. If false, returns raw input.
+     * @param bool $associative Whether to return an associative array or object
+     * @return array|string|null
+     */
+    public function input(bool $decode = true, $associative = true) {
         $input = file_get_contents('php://input');
         if ($decode) {
-            return json_decode($input, true);
+            return json_decode(json: $input, associative: $associative);
         } else {
             return $input;
         }
@@ -523,7 +637,9 @@ class Request {
     }
 }
 
-// Response class
+/**
+ * Response Class
+ */
 class Response {
     private $headers = ['Content-Type' => 'application/json'];
     private $statusCode = 200;
