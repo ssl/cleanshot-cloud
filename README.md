@@ -29,6 +29,8 @@ One way of doing this is with Surge software:
 ^https:\/\/api\.cleanshot\.cloud https://myapi.example.com header
 ```
 
+Another way could be by updating your hosts file and rewriting the IP address of the CleanShot API link. The API would need a valid SSL-certificate for this, which is not possible to request for `api.cleanshot.cloud` - so to fix this, use some self-signed certificate that's trusted by your computer.
+
 ---
 **Use CleanShot X like you would always do**
 
