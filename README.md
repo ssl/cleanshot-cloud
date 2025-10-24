@@ -5,7 +5,9 @@ Self-hosted CleanShot X cloud service to upload screenshots to your own hosting.
 
 If you bought the CleanShot X software and want to upload screenshots to your own cloud, there is no way of setting this up inside the CleanShot X software. This repo fixes that.
 
-Uses [aapje.php](https://github.com/ssl/aapje.php) to recreate the CleanShot API.
+This repo has multiple ways of setting up your own cloud service. Look in the [main branch](https://github.com/ssl/cleanshot-cloud) for an overview.
+
+This is the selfhostdb branch. This branch uses a SQL database and holds the images in the uploads/ folder.
 
 ## Usage
 
