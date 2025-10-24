@@ -1,4 +1,0 @@
-RewriteEngine On
-RewriteCond %{REQUEST_URI} !.well-known/acme-challenge/
-RewriteRule .* - [e=HTTP_AUTHORIZATION:%{HTTP:Authorization}]
-RewriteRule ^(.*)$ index.php [L]
