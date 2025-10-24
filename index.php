@@ -4,34 +4,34 @@ require 'aapje.php';
 $config = parse_ini_file('.env');
 
 aapje::setConfig([
-    'database' => [
-        'host' => $config['dbhost'],
-        'dbname' => $config['dbname'],
-        'user' => $config['dbuser'],
-        'password' => $config['dbpassword'],
-    ],
     'cors' => [
         'enabled' => true
     ],
 ]);
 
-// View upload image
+// Upload and redirect to imgur
 aapje::route('GET', '/@slug', function ($slug) {
     try {
-        $upload = aapje::select('uploads', ['id'], ['slug' => $slug]);
-
-        if (empty($upload)) {
-            throw new Exception('Upload not found');
+        if(!preg_match('/^[a-z0-9]+$/', $slug)) {
+            throw new Exception('Invalid slug');
         }
-
-        $filePath = 'uploads/' . $upload['id'] . '.png';
+        
+        $filePath = "uploads/$slug.png";
         if (!file_exists($filePath)) {
             throw new Exception('File not found');
         }
 
         $file = Helpers::getFile($filePath);
-        aapje::response()->header('Content-Type', 'image/png')
-        ->echo($file, false);
+
+        $imgurUrl = uploadToImgur($filePath);
+        if (!$imgurUrl) {
+            throw  new Exception('Failed to upload to Imgur');
+        }
+
+        unlink($filePath);
+        header('Location: ' . $imgurUrl);
+        exit();
+        
     } catch (Exception $e) {
         aapje::response()->statusCode(404)->echo(['error' => 'Not found']);
     }
@@ -70,30 +70,12 @@ aapje::route('POST', '/v1/auth/code/redeem', function () {
 
 // Generate image upload URL
 aapje::route('POST', '/v1/media/image', function () {
-    // Generate a unique slug
-    $foundSlug = false;
-    while (!$foundSlug) {
-        try {
-            $slug = generateSlug();
-            if (empty(aapje::select('uploads', ['id'], ['slug' => $slug]))) {
-                $foundSlug = true;
-            }
-        } catch (Exception $e) {
-            return;
-        }
-    }
-
-    $id = aapje::insert('uploads', [
-        'slug' => $slug,
-        'created_at' => time(),
-    ]);
-
-    $url = 'https://' . $_SERVER['HTTP_HOST'] . '/' . $slug;
+    $id = bin2hex(random_bytes(5));
     $response = [
         "data" => [
             "media" => [
-                "full_url" => $url,
-                "download_url" => $url,
+                "full_url" => 'https://' . $_SERVER['HTTP_HOST'] . '/' . $id,
+                "download_url" => 'https://' . $_SERVER['HTTP_HOST'] . '/' . $id,
                 "id" => $id,
             ],
             "upload_url" => 'https://' . $_SERVER['HTTP_HOST'] . '/v1/media/upload/' . $id,
@@ -105,12 +87,6 @@ aapje::route('POST', '/v1/media/image', function () {
 // Upload image
 aapje::route('POST', '/v1/media/upload/@id', function ($id) {
     try {
-        $upload = aapje::select('uploads', ['completed'], ['id' => $id]);
-        
-        if (empty($upload) || $upload['completed'] == 1) {
-            throw new Exception('Upload not found');
-        }
-
         $file = aapje::request()->file('file');
         if (!$file || $file['error'] !== UPLOAD_ERR_OK) {
             throw new Exception('File not uploaded');
@@ -131,7 +107,6 @@ aapje::route('POST', '/v1/media/upload/@id', function ($id) {
 
 // Upload completed
 aapje::route('POST', '/v1/media/image/@id/upload-completed', function ($id) {
-    aapje::update('uploads', ['completed' => 1], ['id' => $id]);
     aapje::response()->echo([]);
 });
 
@@ -141,9 +116,39 @@ function userData() {
     return json_decode($userData, true);
 }
 
-// Generate unique slug
-function generateSlug() {
-    return uniqid('', true);
+// Upload image to imgur
+function uploadToImgur($filePath) {
+    try {
+        $imageData = base64_encode(file_get_contents($filePath));
+        
+        $ch = curl_init();
+        curl_setopt($ch, CURLOPT_URL, 'https://api.imgur.com/3/image');
+        curl_setopt($ch, CURLOPT_POST, true);
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($ch, CURLOPT_HTTPHEADER, [
+            'Authorization: Client-ID b50a7351eee91f0',
+            'Content-Type: application/x-www-form-urlencoded'
+        ]);
+        curl_setopt($ch, CURLOPT_POSTFIELDS, http_build_query([
+            'image' => $imageData,
+            'type' => 'base64'
+        ]));
+        
+        $response = curl_exec($ch);
+        $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        curl_close($ch);
+        
+        if ($httpCode === 200) {
+            $data = json_decode($response, true);
+            if ($data && $data['success'] && isset($data['data']['link'])) {
+                return $data['data']['link'];
+            }
+        }
+        
+        return false;
+    } catch (Exception $e) {
+        return false;
+    }
 }
 
 // Run the API
